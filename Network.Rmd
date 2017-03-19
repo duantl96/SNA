@@ -1,0 +1,91 @@
+---
+title: "Network"
+author: "Tianlin Duan"
+date: "February 21, 2017"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Read in data from SAS
+```{r}
+library(sas7bdat)
+nea = read.sas7bdat("nea.sas7bdat") # with all var
+sna = read.sas7bdat("sna.sas7bdat") # with only staff and board var
+```
+
+## Transform dataframe: gather info needed
+```{r}
+library(dplyr)
+library(tidyr)
+
+# base df
+sna.b = sna %>%
+  gather(.,"Type","Name",c(3:12,59:68)) %>%
+  separate(.,Type,c("Type","Number"))%>%
+  mutate(Number = substr(Number,nchar(Number),nchar(Number))) %>%
+  select(id,Type,Number,Name)
+
+# staff title
+sna.t = sna %>%
+  gather(.,"Type","Title",13:22) %>%
+  separate(.,Type,c("Type","Number"))%>%
+  mutate(Number = substr(Number,nchar(Number),nchar(Number))) %>%
+  select(id,Type,Number,Title)
+
+# years
+sna.y = sna %>%
+  gather(.,"Type","Year",c(23:32,69:78))%>%
+  separate(.,Type,c("Type","Number"))%>%
+  mutate(Number = substr(Number,nchar(Number),nchar(Number))) %>%
+  select(id,Type,Number,Year)
+
+# hours
+sna.h = sna %>%
+  gather(.,"Type","Hour",33:42) %>%
+  separate(.,Type,c("Type","Number"))%>%
+  mutate(Number = substr(Number,nchar(Number),nchar(Number))) %>%
+  select(id,Type,Number,Hour)
+
+# essentialness
+sna.e = sna %>%
+  gather(.,"Type","Essential",c(43:52,79:88)) %>%
+  separate(.,Type,c("Type","Number"))%>%
+  mutate(Number = substr(Number,nchar(Number),nchar(Number))) %>%
+  select(id,Type,Number,Essential)
+```
+
+## Group dfs for target df
+```{r}
+sna.transformed = sna.b %>%
+  left_join(.,sna.e,by=c("id"="id","Type"="Type","Number"="Number")) %>%
+  left_join(.,sna.h,by=c("id"="id","Type"="Type","Number"="Number")) %>%
+  left_join(.,sna.t,by=c("id"="id","Type"="Type","Number"="Number")) %>%
+  left_join(.,sna.y,by=c("id"="id","Type"="Type","Number"="Number")) %>%
+  select(id,Name,Type,Title,Year,Hour,Essential)
+write.csv(sna.transformed,"sna_transformed.csv",row.names = F)
+```
+
+## Truncate Name (eg. Tianlin Duan -> Ti Dua)
+```{r}
+sna.clean = sna.transformed %>%
+  mutate(Name = strsplit(Name," "),
+         first.abr = sapply(Name,function(x) substr(x[1],1,2)),
+         last.abr = sapply(Name,function(x) substr(x[length(x)],1,3)), #deal with middle name
+         Name = gsub("NA","",paste0(first.abr,last.abr,sep=" "))) %>%
+  select(-first.abr,-last.abr)
+```
+
+## Clean up
+```{r}
+sna.clean = sna.clean %>%
+  mutate(Type = as.factor(Type),
+         Title = as.factor(Title),
+         Year = gsub("NaN",NA,Year),
+         Hour = gsub("NaN",NA,Hour),
+         Essential = as.factor(Essential)) %>%
+  arrange(id)
+write.csv(sna.clean,"sna_clean.csv",row.names = F)
+```
